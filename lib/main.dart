@@ -1,15 +1,24 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Import this for controlling the orientation
 
 import 'photo_screen.dart'; 
 import 'collection_screen.dart';
+import 'confirmation_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Lock the screen to landscape mode
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeRight,
+    DeviceOrientation.landscapeLeft,
+  ]);
 
   // Sign in anonymously when the app starts
   await _signInAnonymously();
@@ -36,11 +45,27 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
       initialRoute: '/',
-      routes: {
-        '/': (context) => HomeScreen(),
-        '/photo': (context) => PhotoScreen(),
-        '/collection': (context) => CollectionScreen(),
-        '/confirmation': (context) => ConfirmationScreen(),
+      onGenerateRoute: (settings) {
+        // Handle routes dynamically
+        if (settings.name == '/collection') {
+          final photoPath = settings.arguments as String?;
+          return MaterialPageRoute(
+            builder: (context) {
+              return CollectionScreen(photoPath: photoPath ?? '');
+            },
+          );
+        }
+        // Default route handling
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(builder: (context) => HomeScreen());
+          case '/photo':
+            return MaterialPageRoute(builder: (context) => PhotoScreen());
+          case '/confirmation':
+            return MaterialPageRoute(builder: (context) => ConfirmationScreen());
+          default:
+            return null;
+        }
       },
     );
   }
@@ -64,63 +89,6 @@ class HomeScreen extends StatelessWidget {
               child: Text('Go to Photo Screen'),
             )
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// class PhotoScreen extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text('Photo Screen'),
-//       ),
-//       body: Center(
-//         child: ElevatedButton(
-//           onPressed: () {
-//             Navigator.pushNamed(context, '/collection');
-//           },
-//           child: Text('Go to Collection Screen'),
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-// class CollectionScreen extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text('Collection Screen'),
-//       ),
-//       body: Center(
-//         child: ElevatedButton(
-//           onPressed: () {
-//             Navigator.pushNamed(context, '/confirmation');
-//           },
-//           child: Text('Go to Confirmation Screen.'),
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-class ConfirmationScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Confirmation Screen'),
-      ),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-          },
-          child: Text('Back to Home Screen'),
         ),
       ),
     );
