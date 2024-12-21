@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
@@ -15,6 +16,7 @@ class CollectionScreen extends StatefulWidget {
 class _CollectionScreenState extends State<CollectionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _namesController = TextEditingController();
+  final _lastnamesController = TextEditingController();
   final _contactController = TextEditingController();
 
   bool _isSubmitting = false;
@@ -22,33 +24,49 @@ class _CollectionScreenState extends State<CollectionScreen> {
   @override
   void dispose() {
     _namesController.dispose();
+    _lastnamesController.dispose();
     _contactController.dispose();
     super.dispose();
   }
 
-  Future<void> _uploadPhotoAndSaveData(String photoPath) async {
+  Future<void> _savePhotoAndData(BuildContext context) async {
     try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        print('User is not authenticated');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to continue.')),
+        );
+        return;
+      }
+
       setState(() {
         _isSubmitting = true;
       });
 
-      // Upload photo to Firebase Storage
-      final File photo = File(photoPath);
-      final storageRef = FirebaseStorage.instance.ref().child('photos/${DateTime.now().millisecondsSinceEpoch}.jpg');
-      final uploadTask = await storageRef.putFile(photo);
+      // Upload photo to Firebase Storage under the user's UID
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('${user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await storageRef.putFile(File(widget.photoPath));
 
-      // Get the photo's download URL
-      final downloadUrl = await uploadTask.ref.getDownloadURL();
+      // Get the download URL for the uploaded photo
+      final photoUrl = await storageRef.getDownloadURL();
 
-      // Save form data and photo URL to Firestore
-      await FirebaseFirestore.instance.collection('photo_labels').add({
+      // Save photo metadata to Firestore
+      await FirebaseFirestore.instance
+          .collection('photos')
+          .doc(user.uid)
+          .collection('files')
+          .add({
         'names': _namesController.text,
+        'lastnames': _lastnamesController.text,
         'contact': _contactController.text,
-        'photoUrl': downloadUrl,
+        'photoUrl': photoUrl,
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Photo and data saved successfully!')),
       );
@@ -57,6 +75,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
         _isSubmitting = false;
       });
 
+      // Navigate to confirmation screen
+      Navigator.pushNamed(context, '/confirmation');
     } catch (e) {
       print('Error uploading photo and saving data: $e');
       setState(() {
@@ -70,9 +90,6 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Directly use widget.photoPath instead of fetching via ModalRoute
-    final String photoPath = widget.photoPath;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Collection Screen'),
@@ -87,7 +104,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 24),
-                  if (photoPath.isNotEmpty)
+                  if (widget.photoPath.isNotEmpty)
                     Container(
                       width: 600,
                       decoration: BoxDecoration(
@@ -101,12 +118,13 @@ class _CollectionScreenState extends State<CollectionScreen> {
                           ),
                         ],
                       ),
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       padding: const EdgeInsets.fromLTRB(12, 16, 12, 32),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(4),
                         child: Image.file(
-                          File(photoPath),
+                          File(widget.photoPath),
                           width: 580,
                           fit: BoxFit.contain,
                         ),
@@ -131,6 +149,16 @@ class _CollectionScreenState extends State<CollectionScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
+                          const Text('Lastname(s)'),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _lastnamesController,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              hintText: 'Enter lastname(s)',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           const Text('Enter names left to right'),
                           const SizedBox(height: 8),
                           TextFormField(
@@ -163,8 +191,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
                                 ? null
                                 : () {
                                     if (_formKey.currentState!.validate()) {
-                                      if (photoPath.isNotEmpty) {
-                                        _uploadPhotoAndSaveData(photoPath);
+                                      if (widget.photoPath.isNotEmpty) {
+                                        _savePhotoAndData(context);
                                       }
                                     }
                                   },
@@ -187,7 +215,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
               onPressed: () {
                 Navigator.pushNamed(context, '/photo');
               },
-              icon: const Icon(Icons.arrow_back, size: 24, color: Colors.white),
+              icon:
+                  const Icon(Icons.arrow_back, size: 24, color: Colors.white),
               label: const Text(
                 'Retake',
                 style: TextStyle(fontSize: 18, color: Colors.white),
@@ -196,7 +225,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(50),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 backgroundColor: Colors.blueAccent,
                 minimumSize: const Size(110, 55),
               ),
