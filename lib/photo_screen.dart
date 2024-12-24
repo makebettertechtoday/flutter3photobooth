@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:math' as math;
 
 class PhotoScreen extends StatefulWidget {
   @override
@@ -18,7 +19,26 @@ class _PhotoScreenState extends State<PhotoScreen> {
   @override
   void initState() {
     super.initState();
+    // Lock orientation to landscape
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
     _initializeCamera();
+  }
+
+  @override
+  void dispose() {
+    // Reset orientation when leaving the screen
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+    _controller?.dispose();
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initializeCamera() async {
@@ -35,6 +55,9 @@ class _PhotoScreenState extends State<PhotoScreen> {
       );
 
       await _controller!.initialize();
+      // await _controller!.lockCaptureOrientation(CameraOrientation.landscapeRight);
+      await _controller!.lockCaptureOrientation(DeviceOrientation.landscapeRight);
+
       setState(() {
         _isCameraInitialized = true;
       });
@@ -72,13 +95,6 @@ class _PhotoScreenState extends State<PhotoScreen> {
   }
 
   @override
-  void dispose() {
-    _controller?.dispose();
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -87,10 +103,18 @@ class _PhotoScreenState extends State<PhotoScreen> {
       body: _isCameraInitialized
           ? Stack(
               children: [
-                Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.rotationY(math.pi), // Flip horizontally
-                  child: CameraPreview(_controller!),
+                Center(
+                  child: AspectRatio(
+                    aspectRatio: _controller!.value.aspectRatio,
+                    child: Transform(
+                      alignment: Alignment.center,
+                      // Flip preview and rotate to match landscape orientation
+                      transform: Matrix4.identity()
+                        ..rotateY(0) // Flip horizontally for front camera
+                        ..rotateZ(math.pi), // Rotate to landscape
+                      child: CameraPreview(_controller!),
+                    ),
+                  ),
                 ),
                 if (_countdown > 0)
                   Center(
