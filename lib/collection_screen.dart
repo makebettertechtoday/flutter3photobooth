@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 
 class CollectionScreen extends StatefulWidget {
   final String photoPath;
@@ -20,6 +22,13 @@ class _CollectionScreenState extends State<CollectionScreen> {
   final _contactController = TextEditingController();
 
   bool _isSubmitting = false;
+  Uint8List? _processedImageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _processImage();
+  }
 
   @override
   void dispose() {
@@ -29,8 +38,33 @@ class _CollectionScreenState extends State<CollectionScreen> {
     super.dispose();
   }
 
-  Future<void> _savePhotoAndData(BuildContext context) async {
+  Future<void> _processImage() async {
     try {
+      // Load the image from file
+      final imageFile = File(widget.photoPath);
+      final imageBytes = await imageFile.readAsBytes();
+      final originalImage = img.decodeImage(imageBytes);
+
+      if (originalImage != null) {
+        // Rotate the image 180 degrees and flip horizontally
+        // final fixedImage = img.copyRotate(originalImage, angle: 180);
+        // final mirroredImage = img.flipHorizontal(fixedImage);
+
+        // Encode the processed image back to Uint8List
+        final processedBytes = Uint8List.fromList(img.encodeJpg(originalImage));
+
+        // Update state to display the processed image
+        setState(() {
+          _processedImageBytes = processedBytes;
+        });
+      }
+    } catch (e) {
+      print('Error processing image: $e');
+    }
+  }
+
+  Future<void> _savePhotoAndData(BuildContext context) async {
+     try {
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
@@ -104,7 +138,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 24),
-                  if (widget.photoPath.isNotEmpty)
+                  if (_processedImageBytes != null)
                     Container(
                       width: 600,
                       decoration: BoxDecoration(
@@ -123,8 +157,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
                       padding: const EdgeInsets.fromLTRB(12, 16, 12, 32),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(4),
-                        child: Image.file(
-                          File(widget.photoPath),
+                        child: Image.memory(
+                          _processedImageBytes!,
                           width: 580,
                           fit: BoxFit.contain,
                         ),
@@ -133,7 +167,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   else
                     const Text('No photo captured.'),
                   const SizedBox(height: 24),
-                  Container(
+                   Container(
                     width: 600,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Form(
